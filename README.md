@@ -18,7 +18,7 @@ A quick overview on how difficulty is calculated for songs.
 	- Firstly the distance is considered between the current note and the previous same color note.
 	- Next we compute the "Positional Difficulty" current note.
 	  - Basically if a blue note is on the far left, it is harder to hit in general, vice versa for red.
-	  - Another bonus is the note is high up.
+	  - Another bonus if the note is high up.
 	- Next is cut awkwardness, which is defined as cutting in the same direction.
 	  - This only applies if the note is "behind" the previous note cut direction wise.
 	  - Plan is to support based on cut angles as well.
@@ -32,7 +32,7 @@ A quick overview on how difficulty is calculated for songs.
  2. Next up! Average difficulty
 	- Self explanatory, sum up red and divide by total, sum up blue divide by total.
 	- Then `var total_avg = (red_avg + blue_avg) / 1.96f;` no strong reason why I divide by 1.96.
-	- We mult this by 5.0 later, to bring in line with the next step. Keep tweaking.
+	- We multiply this by 5.0 later, to bring in line with the next step. Keep tweaking.
 
  3. Almost done, now we compute the strain/endurance of the song.
 	- Break the song up into `N` beat chunks, where `N` will be: 1,2,4,8.
@@ -54,3 +54,22 @@ A quick overview on how difficulty is calculated for songs.
 	- I divide by 15 at the end to bring the numbers down.
 
 This is obviously not perfect and needs a lot more work but I think it does a decent job honestly.
+
+# TODO List
+**Urgent**
+ - [] Get a rough version of readability done.
+ - [] Move to `score += strain * (1.0f + bonus);` instead of `score += (float)Math.Pow(strain / peak_strain, 2f) * (1f + bonus);`
+
+**Unfinished**
+ - [] Use cut angles for cut awkwardness.
+ - [] Tweak strain bonus formula.
+ - [] Rebalance note speed.
+
+**Finished**
+ - [x] Port code over.
+ - [x] Display difficulty o nsong select.
+
+**Planned**
+ - [] Obstacle support (readability).
+ - [] Bombs.
+ - [] Maze runner style maps.
