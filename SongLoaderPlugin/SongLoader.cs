@@ -15,7 +15,7 @@ namespace SongLoaderPlugin
     {
         public static readonly UnityEvent SongsLoaded = new UnityEvent();
         public static readonly List<CustomSongInfo> CustomSongInfos = new List<CustomSongInfo>();
-        public static readonly List<CustomLevelStaticData> CustomLevelStaticDatas = new List<CustomLevelStaticData>();
+        public static readonly List<CustomLevelStaticData> CustomLevelStaticDatas = new List<CustomLevelStaticData>();    
 
         public const int MenuIndex = 1;
 
@@ -23,10 +23,17 @@ namespace SongLoaderPlugin
         private SongSelectionMasterViewController _songSelectionView;
         private DifficultyViewController _difficultyView;
 
+        public static StreamWriter writer = new StreamWriter(Environment.CurrentDirectory.Replace('\\', '/') + "/log.txt",false);
+
         public static void OnLoad()
         {
             if (Instance != null) return;
             new GameObject("Song Loader").AddComponent<SongLoader>();
+        }
+
+        public static void OnClose()
+        {
+            writer.Close();
         }
 
         public static SongLoader Instance;
@@ -140,8 +147,10 @@ namespace SongLoaderPlugin
                     try
                     {
                         var difficulty = diffLevel.difficulty.ToEnum(LevelStaticData.Difficulty.Normal);
+                        
                         ReflectionUtil.SetPrivateField(newDiffLevel, "_difficulty", difficulty);
-                        ReflectionUtil.SetPrivateField(newDiffLevel, "_difficultyRank", diffLevel.difficultyRank);
+                        //ReflectionUtil.SetPrivateField(newDiffLevel, "_difficultyRank", diffLevel.difficultyRank);
+                        //ReflectionUtil.SetPrivateField(newDiffLevel, "_difficultyRank", temp2);
 
                         if (!File.Exists(song.path + "/" + diffLevel.jsonPath))
                         {
@@ -151,6 +160,30 @@ namespace SongLoaderPlugin
 
                         var newSongLevelData = ScriptableObject.CreateInstance<SongLevelData>();
                         var json = File.ReadAllText(song.path + "/" + diffLevel.jsonPath);
+
+                        CustomSongDifficulty song_difficulty=null;
+                        try
+                        {
+                            song_difficulty = GetCustomSongDifficulty(json);
+                        }
+                        catch(Exception e)
+                        {
+                            Log("Error while calculating diff for " + song.path + "/" + diffLevel.jsonPath);
+                            Log(e.Message);
+                            Log(e.StackTrace);
+                            continue;
+                        }
+                        if (song_difficulty != null)
+                        {
+                            int temp = song_difficulty.GetDifficulty(song.songName, difficulty);
+                            
+                            ReflectionUtil.SetPrivateField(newDiffLevel, "_difficultyRank", temp);
+                        }
+                        else
+                        {
+                            ReflectionUtil.SetPrivateField(newDiffLevel, "_difficultyRank", 1);
+                        }
+
                         try
                         {
                             newSongLevelData.LoadFromJson(json);
@@ -171,6 +204,7 @@ namespace SongLoaderPlugin
                     {
                         Log("Error parsing difficulty level in song: " + song.path);
                         Log(e.Message);
+                        Log(e.StackTrace);
                         continue;
                     }
                 }
@@ -250,6 +284,9 @@ namespace SongLoaderPlugin
             {
                 Directory.CreateDirectory(path + "/CustomSongs/.cache");
             }
+
+            // for my custom logging
+            if (!Directory.Exists(path + "/CustomSongs/.Output")) { Directory.CreateDirectory(path + "/CustomSongs/.Output"); }
 
             var songZips = Directory.GetFiles(path + "/CustomSongs")
                 .Where(x => x.ToLower().EndsWith(".zip") || x.ToLower().EndsWith(".beat")).ToArray();
@@ -346,10 +383,46 @@ namespace SongLoaderPlugin
             return songInfo;
         }
 
+        private CustomSongDifficulty GetCustomSongDifficulty(string json)
+        {
+            //var infoText = File.ReadAllText(songPath);
+            CustomSongDifficulty songDifficulty;
+            try
+            {
+                songDifficulty = JsonUtility.FromJson<CustomSongDifficulty>(json);
+            }
+            catch (Exception e)
+            {
+                Log("Error parsing JSON");
+                return null;
+            }
+
+            //Here comes SimpleJSON to the rescue when JSONUtility can't handle an array.
+            var notes = new List<CustomSongDifficulty.Note>();
+            var n = JSON.Parse(json);
+            var _notes = n["_notes"];
+            for(int i = 0;i<_notes.AsArray.Count; i++)
+            {
+                n = _notes[i];
+                notes.Add(new CustomSongDifficulty.Note()
+                {
+                    _time = n["_time"].AsFloat,
+                    _lineIndex = n["_lineIndex"].AsInt,
+                    _lineLayer = n["_lineLayer"].AsInt,
+                    _type = n["_type"].AsInt,
+                    _cutDirection = n["_cutDirection"].AsInt
+                });
+            }
+            songDifficulty._notes = notes.ToArray();
+
+            return songDifficulty;
+        }
+
         private void Log(string message)
         {
             Debug.Log("Song Loader: " + message);
             Console.WriteLine("Song Loader: " + message);
+            writer.WriteLine("Song Loader: " + message);
         }
 
         private void Update()
