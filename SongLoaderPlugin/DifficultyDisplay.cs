@@ -27,7 +27,6 @@ namespace SongLoaderPlugin
         void FixedUpdate()
         {
             SongDetailViewController SDVC = Resources.FindObjectsOfTypeAll<SongDetailViewController>().FirstOrDefault();
-            DifficultyViewController DVC = Resources.FindObjectsOfTypeAll<DifficultyViewController>().FirstOrDefault();
             if (SDVC != null)
             {
                 var diff_selected = ReflectionUtil.GetPrivateField<LevelStaticData.Difficulty>(SDVC, "_difficulty");

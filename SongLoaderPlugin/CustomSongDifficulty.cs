@@ -144,7 +144,8 @@ namespace SongLoaderPlugin
             writer.Write("Final Scaled Diff Pre Length: " + final_scaled_diff + Environment.NewLine);
             final_scaled_diff = final_scaled_diff * (1f + (_length*_secondsPerBeat / 90f) * 0.20f); // longer songs are harder, partially accounted for in strain with bonus mult
             writer.Write("Final Scaled Diff: " + final_scaled_diff + Environment.NewLine);
-            return final_scaled_diff / 15.0f;
+            writer.Write("Star Diff: " + final_scaled_diff/18.0f + Environment.NewLine);
+            return final_scaled_diff / 18.0f;
         }
 
         private float calcSongEnduranceScore(ArrayList note_data, int beats_per_section)
@@ -215,16 +216,20 @@ namespace SongLoaderPlugin
                     {
                         bonus = Math.Min(bonus + 0.05f, max_bonus);
                     }
+                    else if (strain > strain_avg + strain_dev * 0.5f)
+                    {
+                        bonus = Math.Min(bonus + 0.03f, max_bonus); // new
+                    }
                     else if (strain > strain_avg + strain_dev * 0f)
                     {
-                        bonus = Math.Min(bonus + 0.03f, max_bonus);
+                        bonus = Math.Min(bonus + 0.02f, max_bonus); // was 0.03
                     }
                 }
                 else
                 {
                     if (strain < strain_avg - strain_dev * 3f)
                     {
-                        bonus = Math.Max(bonus - 0.2f, 0.0f);
+                        bonus = Math.Max(bonus - 0.20f, 0.0f);
                     }
                     else if (strain < strain_avg - strain_dev * 2f)
                     {
@@ -234,24 +239,34 @@ namespace SongLoaderPlugin
                     {
                         bonus = Math.Max(bonus - 0.05f, 0.0f);
                     }
+                    else if (strain < strain_avg - strain_dev * 0.5f)
+                    {
+                        bonus = Math.Max(bonus - 0.01f, max_bonus);
+                    }
                     else if (strain < strain_avg - strain_dev * 0f)
                     {
-                        bonus = Math.Max(bonus + 0.005f, max_bonus);
+                        bonus = Math.Max(bonus + 0.002f, max_bonus);
                     }
 
                     // trying out having strain for a section not compared against peak strain
-                    // TODO tired it, need more balancing for sure, helped some songs, made many more worse
-                    //score += strain * (1.0f + bonus);
-                    score += (float)Math.Pow(strain / peak_strain, 2f) * (1f + bonus);
+                    // TODO tried it, need more balancing for sure, helped some songs, made many more worse
+                    score += strain * (1.0f + bonus);
+                    //score += (float)Math.Pow(strain / peak_strain, 2f) * (1f + bonus);
                 }
                 score *= 1f + ((float)i / (float)strains.Count) * 0.3f;
-                // considering a second bonus for pure length, as i goes up so does another bonus
+
+                // TODO Balance
+                //writer.Write("Strain Pre Length: " + score + Environment.NewLine);
+                //score *= 1.0f + ((float)i / (25.0f * (float)beats_per_section));
+                //writer.Write("Strain Post Length: " + score + Environment.NewLine);
+
                 strain_score += score;
             }
+
             strain_score *= (peak_strain / 3f) * (strain_avg / 2f); // bonus scalar so easy songs that are uniform in diff don't get high strain scores
             writer.Write("Strain Score Pre Log: " + strain_score + Environment.NewLine);
             strain_score = (float)(Math.Log(strain_score) / Math.Log(1.2));
-            // if this happens then the song had extreme variance or was too easy, most common on easy songs at the 1 beat and sometimes 2 beat test
+            // This should never happen anymore, but leaving just in case
             if (strain_score < 0f)
             {
                 strain_score = 0f;
@@ -406,12 +421,13 @@ namespace SongLoaderPlugin
         {
             if (prior_note == null) { return (0.05f * GetPositionalDifficulty(curr_note)); } // first note of this color, assume it is stupid easy for note to be hit, less diff score for pos
             float diff_score = 0.08f;
-            float dist_physical = GetPhysicalNoteDistance(prior_note, curr_note) * 1.25f; // some more weighting for distance, keep tweaking
+            float dist_physical = GetPhysicalNoteDistance(prior_note, curr_note) * 1.45f; // some more weighting for distance, keep tweaking
             float dist_time = curr_note._time - prior_note._time;
 
             if (dist_time == 0) { return 0; } // same time is handled later in caller function
 
-            if (dist_time >= 4) { return ((diff_score + 0.1f) * GetPositionalDifficulty(curr_note)); } // no point to consider actual prior note because of large aim and recovery time, bonus points for it being hard to reach though
+            // no point to consider actual prior note because of large aim and recovery time, bonus points for it being hard to reach though and other readability cases
+            if (dist_time >= 4) { return ((diff_score + 0.1f) * GetPositionalDifficulty(curr_note) * GetReadabilityDifficulty(prior_note_stack, prior_note, curr_note)); } 
                                                                                                       // does not penalize circle notes, diff is already low enough
             // diff_score += Math.sqrt(Math.pow(dist_physical, 2) + Math.pow(dist_time * 4, 2));
             diff_score += dist_physical;
@@ -428,7 +444,7 @@ namespace SongLoaderPlugin
 
             // 0.375 secs per beat at 160 BPM, Base Line
             //diff_score = (float)(Math.Pow(diff_score, 1f + (1f / (dist_time)) * 0.85f));
-            diff_score = (float)(Math.Pow(diff_score, 1f + (0.375 / (dist_time*_secondsPerBeat)) * 0.87f));
+            diff_score = (float)(Math.Pow(diff_score, 0.0f + (0.375 / (dist_time * _secondsPerBeat)) * 0.87f));
 
             // scale the score down for circle notes, further scale down if previous note is also circle note
             if (curr_note._cutDirection == 8)
@@ -443,12 +459,18 @@ namespace SongLoaderPlugin
         private float getCutAwkwardness(ArrayList prior_note_stack, Note previous_note, Note curr_note)
         {
             float diff_mult = 1.0f;
+            var time_delta = curr_note._time - previous_note._time;
             // need to only apply to cuts at same pos or opposite of prior cut dir TODO
-            if (previous_note._cutDirection == curr_note._cutDirection && previous_note._time != curr_note._time && !isNoteInFront(previous_note, curr_note))
+            if (angDiff(getCutAngle(curr_note), getCutAngle(previous_note)) <= 90 && previous_note._time != curr_note._time && !isNoteInFront(curr_note, previous_note))
             {
                 diff_mult += 0.15f;
-                var time_delta = curr_note._time - previous_note._time;
-                diff_mult *= (1.5f) * (1f / time_delta);
+                diff_mult *= (1.0f) * (1f / time_delta);
+                diff_mult *= 1.0f + (angDiff(getCutAngle(curr_note), getCutAngle(previous_note))) / 90;
+            }
+            else if (angDiff(getCutAngle(curr_note), getCutAngle(previous_note)) <= 45 && time_delta<0.34 && isNoteInFront(curr_note, previous_note))
+            {
+                //diff_mult += 0.15f;           
+                diff_mult *= (time_delta / 1.0f); // for those weird 1/4 space notes that flow and such
             }
 
             return diff_mult;
@@ -499,10 +521,37 @@ namespace SongLoaderPlugin
             return bonus_mult;
         }
 
-        // TODO
         private float GetReadabilityDifficulty(ArrayList prior_note_stack, Note prior_note, Note curr_note)
         {
-            return 1.0f;
+            float diff_mult = 0.0f;
+            for(int i = 0; i < prior_note_stack.Count; i++)
+            {
+                Note a = (Note)prior_note_stack[i];
+                float time_delta = curr_note._time - a._time;
+                if (time_delta>1.0f || time_delta==0.0f) { continue; }
+                if(a._lineIndex==curr_note._lineIndex && a._lineLayer == curr_note._lineLayer) // Same pos
+                {
+                    if (a._type == curr_note._type) { diff_mult += (0.5f * (1.0f / time_delta)); } // same color note
+                    else{ diff_mult += 0.7f * (1.0f / time_delta); } // opposite color note
+                }
+                else if (a._lineLayer==1 && curr_note._lineLayer==1)
+                {
+                    if ((a._lineIndex==1 || a._lineIndex==2) && Math.Abs(a._lineIndex - curr_note._lineIndex) <= 1) // layer 1 and off by 1 in index
+                    {
+                        if (a._type == curr_note._type) { diff_mult += (0.2f * (1.0f / time_delta)); } // same color note
+                        else { diff_mult += 0.3f * (1.0f / time_delta); } // opposite color note
+                    }
+                }
+                else if (a._lineLayer == 1 && curr_note._lineLayer == 0)
+                {
+                    if ((a._lineIndex == 1 || a._lineIndex == 2) && Math.Abs(a._lineIndex - curr_note._lineIndex) <= 1) // layer 1 and index 1,2 and off by 1 in index
+                    {
+                        if (a._type == curr_note._type) { diff_mult += (0.1f * (1.0f / time_delta)); } // same color note
+                        else { diff_mult += 0.2f * (1.0f / time_delta); } // opposite color note
+                    }
+                }
+            }
+            return 1.0f+diff_mult;
         }
 
         private float GetPhysicalNoteDistance(Note prior_note, Note curr_note)
@@ -514,7 +563,6 @@ namespace SongLoaderPlugin
         }
 
         // Helpers for the helpers, little elves...
-
         private Vector2 getNoteExitPoint(Note note)
         {
             // TODO error handling
@@ -597,6 +645,21 @@ namespace SongLoaderPlugin
             }
             Vector2 pos = new Vector2(x_pos, y_pos);
             return pos;
+        }
+
+        private float angDiff(float a, float b)
+        {
+            float res = Math.Abs(a - b);
+            if (res > 180.0f) { res = Math.Abs(res - 360.0f); }
+            return res;
+        }
+
+        private float getCutAngle(Note n)
+        {
+            Vector2 exit = getNoteExitPoint(n);
+            Vector2 entry = getNoteEntryPoint(n);
+            float ang = getAngle(exit.x - entry.x, exit.y - entry.y);
+            return ang;
         }
 
         // 0 will be up, 90 right, 180 down, 270 left

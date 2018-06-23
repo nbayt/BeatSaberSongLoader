@@ -31,7 +31,6 @@ namespace SongLoaderPlugin
 		public void OnLevelWasLoaded(int level)
 		{
             if (level != SongLoader.MenuIndex) return;
-            //new GameObject("DifficultyDisplay").AddComponent<DifficultyDisplay>();
         }
 
 		public void OnLevelWasInitialized(int level)

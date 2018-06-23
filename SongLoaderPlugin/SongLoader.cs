@@ -149,8 +149,6 @@ namespace SongLoaderPlugin
                         var difficulty = diffLevel.difficulty.ToEnum(LevelStaticData.Difficulty.Normal);
                         
                         ReflectionUtil.SetPrivateField(newDiffLevel, "_difficulty", difficulty);
-                        //ReflectionUtil.SetPrivateField(newDiffLevel, "_difficultyRank", diffLevel.difficultyRank);
-                        //ReflectionUtil.SetPrivateField(newDiffLevel, "_difficultyRank", temp2);
 
                         if (!File.Exists(song.path + "/" + diffLevel.jsonPath))
                         {
@@ -414,6 +412,23 @@ namespace SongLoaderPlugin
                 });
             }
             songDifficulty._notes = notes.ToArray();
+
+            var obstacles = new List<CustomSongDifficulty.Obstacle>();
+            n = JSON.Parse(json);
+            var _obstacles = n["_obstacles"];
+            for(int i = 0; i < _obstacles.AsArray.Count; i++)
+            {
+                n = _obstacles[i];
+                obstacles.Add(new CustomSongDifficulty.Obstacle()
+                {
+                    _time = n["_time"].AsFloat,
+                    _lineIndex = n["_lineIndex"].AsInt,
+                    _type = n["_type"].AsInt,
+                    _duration = n["_duration"].AsFloat,
+                    _width = n["_width"].AsFloat
+                });
+            }
+            songDifficulty._obstacles = obstacles.ToArray();
 
             return songDifficulty;
         }
