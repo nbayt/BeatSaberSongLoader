@@ -17,17 +17,17 @@ See [here](https://github.com/nbayt/BeatSaberSongLoader/wiki/Difficulty-Calculat
 
 # TODO List
 **Urgent**
- - [x] Get a rough version of readability done.
- - [x] Move to `score += strain * (1.0f + bonus);` instead of `score += (float)Math.Pow(strain / peak_strain, 2f) * (1f + bonus);`
+
 
 **Unfinished**
- - [x] Use cut angles for cut awkwardness.
  - [ ] Tweak strain bonus formula.
  - [ ] Rebalance note speed.
 
 **Finished**
  - [x] Port code over.
  - [x] Display difficulty on song select.
+ - [x] Get a rough version of readability done.
+ - [x] Use cut angles for cut awkwardness.
 
 **Planned**
  - [ ] Obstacle support (readability).

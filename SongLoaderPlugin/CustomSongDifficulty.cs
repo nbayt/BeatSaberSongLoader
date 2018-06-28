@@ -66,6 +66,7 @@ namespace SongLoaderPlugin
             Array.Sort(_notes, delegate (Note x, Note y) { return x._time.CompareTo(y._time); }); // Not always sorted in some cases
             _secondsPerBeat = 1.0f/(_beatsPerMinute / 60.0f);
             _length = _notes[_notes.Length-1]._time - _notes[0]._time;
+            writer.Write("Seconds Per Beat: " + _secondsPerBeat + Environment.NewLine);
 
             //float temp = UnityEngine.Random.Range(0.0f, 10.0f);
             //int temp2 = (int)(temp * 100.0f);
@@ -132,7 +133,7 @@ namespace SongLoaderPlugin
             // regardless, 80 in this case should be considered harder since diff should be based on song bpm. Higher bpm songs will just push diff points higher when mapped the same - NOT ANYMORE
             // TODO TEST!!!!!
             //var final_scaled_diff = (total_avg * (1 + (speed_data.spb / speed_data.avg_spn) + (bpm / (bpm + 130) * 0.2)) * 5.0); // 5x mult to bring score in line with average strain scores
-            float final_scaled_diff = total_avg * 5.0f;
+            float final_scaled_diff = total_avg * 50.0f;
             writer.Write("Total Avg: " + total_avg + Environment.NewLine);
             writer.Write("Strain Score Total Avg: " + strain_score + Environment.NewLine);
 
@@ -144,8 +145,8 @@ namespace SongLoaderPlugin
             writer.Write("Final Scaled Diff Pre Length: " + final_scaled_diff + Environment.NewLine);
             final_scaled_diff = final_scaled_diff * (1f + (_length*_secondsPerBeat / 90f) * 0.20f); // longer songs are harder, partially accounted for in strain with bonus mult
             writer.Write("Final Scaled Diff: " + final_scaled_diff + Environment.NewLine);
-            writer.Write("Star Diff: " + final_scaled_diff/18.0f + Environment.NewLine);
-            return final_scaled_diff / 18.0f;
+            writer.Write("Star Diff: " + final_scaled_diff/500.0f + Environment.NewLine);
+            return final_scaled_diff/500.0f;
         }
 
         private float calcSongEnduranceScore(ArrayList note_data, int beats_per_section)
@@ -194,10 +195,12 @@ namespace SongLoaderPlugin
             foreach(float strain in strains) { strain_sum += (float)(Math.Pow(strain - strain_avg, 2.0f)); }
             strain_dev = (float)Math.Sqrt(strain_sum / ((float)strains.Count));
 
+            writer.Write("Strain Peak: " + peak_strain + " Strain Avg: " + strain_avg + " Strain Dev " + strain_dev + Environment.NewLine);
+
             // do some bullshit math to get score
             float strain_score = 0f;
             float bonus = 0.0f; // the longer we are close to or above avg by std, then increase bonus because is tiring to work above avg all the time... something like that?
-            float max_bonus = 5.0f;
+            float max_bonus = 2.0f;
             for(int i = 0; i < strains.Count; i++)
             {
                 float strain = (float)strains[i];
@@ -263,9 +266,10 @@ namespace SongLoaderPlugin
                 strain_score += score;
             }
 
-            strain_score *= (peak_strain / 3f) * (strain_avg / 2f); // bonus scalar so easy songs that are uniform in diff don't get high strain scores
+            strain_score *= (peak_strain / 3f) * (strain_avg / 2f) * Mathf.Clamp(10f/strain_dev,0.6f,2.0f); // bonus scalar so easy songs that are uniform in diff don't get high strain scores
             writer.Write("Strain Score Pre Log: " + strain_score + Environment.NewLine);
-            strain_score = (float)(Math.Log(strain_score) / Math.Log(1.2));
+            //strain_score = (float)(Math.Log(strain_score) / Math.Log(1.2));
+            strain_score = (float)Math.Sqrt(strain_score);
             // This should never happen anymore, but leaving just in case
             if (strain_score < 0f)
             {
@@ -444,7 +448,9 @@ namespace SongLoaderPlugin
 
             // 0.375 secs per beat at 160 BPM, Base Line
             //diff_score = (float)(Math.Pow(diff_score, 1f + (1f / (dist_time)) * 0.85f));
-            diff_score = (float)(Math.Pow(diff_score, 0.0f + (0.375 / (dist_time * _secondsPerBeat)) * 0.87f));
+            //writer.Write("Diff Score: " + diff_score + Environment.NewLine);
+            diff_score = (float)(Math.Pow(1+diff_score, 1.0f + (0.375f / (dist_time * _secondsPerBeat)) * 0.87f));
+            //writer.Write("Diff Score: " + diff_score + Environment.NewLine);
 
             // scale the score down for circle notes, further scale down if previous note is also circle note
             if (curr_note._cutDirection == 8)
@@ -459,12 +465,13 @@ namespace SongLoaderPlugin
         private float getCutAwkwardness(ArrayList prior_note_stack, Note previous_note, Note curr_note)
         {
             float diff_mult = 1.0f;
-            var time_delta = curr_note._time - previous_note._time;
+            float time_delta = curr_note._time - previous_note._time;
+            float speed_factor = (0.375f / (time_delta * _secondsPerBeat));
             // need to only apply to cuts at same pos or opposite of prior cut dir TODO
             if (angDiff(getCutAngle(curr_note), getCutAngle(previous_note)) <= 90 && previous_note._time != curr_note._time && !isNoteInFront(curr_note, previous_note))
             {
                 diff_mult += 0.15f;
-                diff_mult *= (1.0f) * (1f / time_delta);
+                diff_mult *= (1.0f) * (speed_factor);
                 diff_mult *= 1.0f + (angDiff(getCutAngle(curr_note), getCutAngle(previous_note))) / 90;
             }
             else if (angDiff(getCutAngle(curr_note), getCutAngle(previous_note)) <= 45 && time_delta<0.34 && isNoteInFront(curr_note, previous_note))
@@ -528,26 +535,28 @@ namespace SongLoaderPlugin
             {
                 Note a = (Note)prior_note_stack[i];
                 float time_delta = curr_note._time - a._time;
+                //float speed_factor = 1.0f / time_delta;
+                float speed_factor = (0.375f / (time_delta * _secondsPerBeat));
                 if (time_delta>1.0f || time_delta==0.0f) { continue; }
                 if(a._lineIndex==curr_note._lineIndex && a._lineLayer == curr_note._lineLayer) // Same pos
                 {
-                    if (a._type == curr_note._type) { diff_mult += (0.5f * (1.0f / time_delta)); } // same color note
-                    else{ diff_mult += 0.7f * (1.0f / time_delta); } // opposite color note
+                    if (a._type == curr_note._type) { diff_mult += (0.5f * (speed_factor)); } // same color note
+                    else{ diff_mult += 0.7f * (speed_factor); } // opposite color note
                 }
                 else if (a._lineLayer==1 && curr_note._lineLayer==1)
                 {
                     if ((a._lineIndex==1 || a._lineIndex==2) && Math.Abs(a._lineIndex - curr_note._lineIndex) <= 1) // layer 1 and off by 1 in index
                     {
-                        if (a._type == curr_note._type) { diff_mult += (0.2f * (1.0f / time_delta)); } // same color note
-                        else { diff_mult += 0.3f * (1.0f / time_delta); } // opposite color note
+                        if (a._type == curr_note._type) { diff_mult += (0.2f * (speed_factor)); } // same color note
+                        else { diff_mult += 0.3f * (speed_factor); } // opposite color note
                     }
                 }
                 else if (a._lineLayer == 1 && curr_note._lineLayer == 0)
                 {
                     if ((a._lineIndex == 1 || a._lineIndex == 2) && Math.Abs(a._lineIndex - curr_note._lineIndex) <= 1) // layer 1 and index 1,2 and off by 1 in index
                     {
-                        if (a._type == curr_note._type) { diff_mult += (0.1f * (1.0f / time_delta)); } // same color note
-                        else { diff_mult += 0.2f * (1.0f / time_delta); } // opposite color note
+                        if (a._type == curr_note._type) { diff_mult += (0.1f * (speed_factor)); } // same color note
+                        else { diff_mult += 0.2f * (speed_factor); } // opposite color note
                     }
                 }
             }
